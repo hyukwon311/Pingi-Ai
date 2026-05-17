@@ -1,0 +1,59 @@
+# =============================================================================
+# pingi-ai .gitignore
+# =============================================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# --- 가상환경 ---
+.venv/
+venv/
+env/
+
+# --- 환경 변수 (비밀 정보 포함 가능) ---
+.env
+
+# --- 임시 파일 (오디오 변환 중간 산물) ---
+tmp/
+
+# --- 테스트 / 린터 캐시 ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- 오디오 파일 (분석 대상이므로 리포에 포함하지 않음) ---
+*.wav
+*.webm
+*.m4a
+*.mp3
+*.ogg
+*.flac
+
+# --- 로그 ---
+*.log
+
+# --- IDE ---
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- ML 모델 캐시 ---
+*.pt
+*.bin
+
+# --- 개발환경 ---
+/.history
+/plan
+/.cursor

@@ -1,0 +1,33 @@
+# =============================================================================
+# pingi-ai 의존성 목록
+# =============================================================================
+# 이 파일은 pingi-ai 음성 분석 서버의 Python 패키지 의존성을 정의한다.
+#
+# 설치 방법:
+#   pip install -r requirements.txt
+#
+# 참고: ffmpeg가 시스템에 설치되어 있어야 한다.
+#   macOS:  brew install ffmpeg
+#   Ubuntu: sudo apt install ffmpeg
+# =============================================================================
+
+# --- 웹 프레임워크 ---
+fastapi                  # 비동기 REST API 프레임워크
+uvicorn[standard]        # ASGI 서버 (FastAPI 실행용)
+python-multipart         # multipart/form-data 파싱 (오디오 파일 업로드)
+
+# --- 설정 관리 ---
+pydantic-settings        # 환경 변수 기반 설정 (.env 파일 로드)
+
+# --- 음향 분석 ---
+opensmile                # openSMILE eGeMAPSv02 음성 피처 추출 (jitter, shimmer, HNR 등)
+librosa                  # 오디오 피처 추출 (발화 속도 계산용)
+soundfile                # 오디오 파일 읽기/쓰기 (wav, flac 등)
+numpy                    # 수치 연산 (피처 계산의 기반)
+
+# --- 오디오 변환 ---
+pydub                    # 오디오 포맷 변환 (webm/m4a → wav), ffmpeg 래퍼
+
+# --- 테스트 ---
+pytest                   # 테스트 프레임워크
+httpx                    # FastAPI 비동기 테스트용 HTTP 클라이언트

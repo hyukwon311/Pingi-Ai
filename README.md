@@ -3,7 +3,7 @@
 핑이(Pingi) 서비스의 **음성 분석 AI 서버**. 술자리에서 녹음한 음성을 분석하여 음향 특징 변화율 기반의 취도(0~5 레벨)를 판정한다.
 
 ```
-pingi-app (React) → pingi-backend (Express) → pingi-ai (이 서버)
+pingi-front (React) → pingi-backend (Express) → pingi-ai (이 서버)
 ```
 
 > pingi-ai는 pingi-backend에서만 호출되며, 프론트엔드가 직접 접근하지 않는다.

@@ -1,12 +1,13 @@
 # Pingi-ai
 
-핑이(Pingi) 서비스의 **음성 분석 AI 서버**. 술자리에서 녹음한 음성을 분석하여 음향 특징 변화율 기반의 취도(0~5 레벨)를 판정한다.
+핑이(Pingi) 서비스의 **음성 피처 추출 서버**. 술자리에서 녹음한 음성에서 9가지 음향 특징을 추출하여 pingi-backend에 반환한다.
 
 ```
 pingi-front (React) → pingi-backend (Express) → pingi-ai (이 서버)
 ```
 
 > pingi-ai는 pingi-backend에서만 호출되며, 프론트엔드가 직접 접근하지 않는다.
+> 변화율/취도 계산은 pingi-backend에서 수행한다.
 
 ## 분석 엔진
 
@@ -15,30 +16,19 @@ pingi-front (React) → pingi-backend (Express) → pingi-ai (이 서버)
 | **openSMILE eGeMAPSv02** | 음향 피처 추출 | jitter, shimmer, HNR, F1, F2, loudness, F0, F0 변동성 |
 | **librosa**              | 발화 속도 측정 | speed (초당 음절 수 기반)                             |
 
-9가지 피처를 가중 평균하여 단일 변화율(changeRate)을 산출하고, 이를 0~5 레벨로 변환한다.
+### 추출 피처 (9가지)
 
-### 피처별 가중치 및 음주 시 변화 방향
-
-피처는 음주 시 변화의 일관성과 신뢰도에 따라 두 그룹으로 분류한다.
-
-**그룹 A — 의미 있는 변화량 (합 65%)**
-
-| 피처          | 설명                            | 음주 시 | 방향     | 가중치 |
-| ------------- | ------------------------------- | ------- | -------- | ------ |
-| **speed**     | 발화 속도 (음절/초)             | 느려짐  | decrease | 20%    |
-| **F0 변동성** | 기본 주파수 변동성 (stddevNorm) | 증가    | increase | 18%    |
-| **HNR**       | 조화음 대비 잡음 비율 (dB)      | 감소    | decrease | 15%    |
-| **F0**        | 기본 주파수 평균 (semitone)     | 상승    | increase | 12%    |
-
-**그룹 B — 일관성 부족 / 외부 요인·개인차 큰 Feature (합 35%)**
-
-| 피처         | 설명                                   | 음주 시      | 방향      | 가중치 |
-| ------------ | -------------------------------------- | ------------ | --------- | ------ |
-| **jitter**   | 성대 떨림 주기 불규칙성                | 변동         | deviation | 9%     |
-| **shimmer**  | 음성 진폭 불안정성 (dB)                | 변동         | deviation | 9%     |
-| **loudness** | 음량 변동성 (stddevNorm)               | 분포 확산    | deviation | 9%     |
-| **F1**       | 제1 포먼트 발화 내 변동성 (stddevNorm) | 변동성 증가  | increase  | 4%     |
-| **F2**       | 제2 포먼트 발화 내 변동성 (stddevNorm) | 변동성 증가  | increase  | 4%     |
+| 피처          | 설명                            | openSMILE 통계량 |
+| ------------- | ------------------------------- | ----------------- |
+| **jitter**    | 성대 떨림 주기 불규칙성         | amean             |
+| **shimmer**   | 음성 진폭 불안정성 (dB)         | amean             |
+| **HNR**       | 조화음 대비 잡음 비율 (dB)      | amean             |
+| **F0**        | 기본 주파수 평균 (semitone)     | amean             |
+| **F0 변동성** | 기본 주파수 변동성              | stddevNorm        |
+| **F1**        | 제1 포먼트 발화 내 변동성       | stddevNorm        |
+| **F2**        | 제2 포먼트 발화 내 변동성       | stddevNorm        |
+| **loudness**  | 음량 변동성                     | stddevNorm        |
+| **speed**     | 발화 속도 (음절/초, librosa)    | —                 |
 
 ## 사전 요구 사항
 
@@ -104,6 +94,7 @@ uvicorn main:app --port 8001 --workers 2
 ### `POST /api/v1/analyze/baseline`
 
 맨정신 상태의 음성 3개를 분석하여 개인 음성 기준선(features)을 생성한다.
+3개 녹음의 피처 평균과 일관성(consistency)을 산출한다.
 
 **Request** `multipart/form-data`
 
@@ -137,47 +128,33 @@ uvicorn main:app --port 8001 --workers 2
 
 ### `POST /api/v1/analyze/recording`
 
-핑이타임 녹음을 베이스라인과 비교하여 취도를 판정한다.
+핑이타임 녹음에서 9개 음향 피처를 추출한다.
+pingi-backend가 이 피처를 베이스라인과 비교하여 변화율/취도를 자체 계산한다.
 
 **Request** `multipart/form-data`
 
-| 필드               | 타입          | 설명                        |
-| ------------------ | ------------- | --------------------------- |
-| `audio`            | file          | 핑이타임 녹음 파일          |
-| `sentence`         | string        | 기대 문장 텍스트            |
-| `baselineFeatures` | string (JSON) | 해당 멤버의 베이스라인 피처 |
+| 필드       | 타입   | 설명               |
+| ---------- | ------ | ------------------ |
+| `audio`    | file   | 핑이타임 녹음 파일 |
+| `sentence` | string | 기대 문장 텍스트   |
 
 **Response**
 
 ```json
 {
-  "score": 0.35,
-  "level": 2,
-  "changeRate": 23.5,
-  "detail": {
-    "currentJitter": 0.018,
-    "currentShimmer": 0.62,
-    "currentHnr": 9.8,
-    "currentF1": 0.35,
-    "currentF2": 0.28,
-    "currentLoudness": 0.42,
-    "currentF0": 30.1,
-    "currentF0Var": 0.078,
-    "currentSpeed": 0.72
+  "features": {
+    "jitter": 0.018,
+    "shimmer": 0.62,
+    "hnr": 9.8,
+    "f1": 0.35,
+    "f2": 0.28,
+    "loudness": 0.42,
+    "f0": 30.1,
+    "f0_var": 0.078,
+    "speed": 0.72
   }
 }
 ```
-
-## 취도 레벨 기준
-
-| 레벨 | 설명           | 변화율 구간 |
-| ---- | -------------- | ----------- |
-| 0    | 멀쩡해요       | < 5%        |
-| 1    | 살짝 취기      | 5% ~ 15%    |
-| 2    | 기분 좋은 취기 | 15% ~ 30%   |
-| 3    | 제법 취함      | 30% ~ 50%   |
-| 4    | 많이 취함      | 50% ~ 70%   |
-| 5    | 만취           | ≥ 70%       |
 
 ## 프로젝트 구조
 
@@ -198,7 +175,7 @@ pingi-ai/
 │   │   ├── feature_extractor.py     # openSMILE + librosa 피처 추출
 │   │   └── audio_converter.py       # 오디오 → 16kHz 모노 wav 변환
 │   └── utils/
-│       └── level_calculator.py      # changeRate → 레벨 변환
+│       └── level_calculator.py      # (레거시) changeRate → 레벨 변환
 ├── tests/                           # pytest 테스트
 ├── requirements.txt                 # Python 의존성
 ├── pytest.ini                       # pytest 설정

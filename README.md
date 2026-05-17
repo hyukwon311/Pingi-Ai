@@ -10,12 +10,26 @@ pingi-front (React) → pingi-backend (Express) → pingi-ai (이 서버)
 
 ## 분석 엔진
 
-| 엔진                     | 역할           | 추출 피처                                  |
-| ------------------------ | -------------- | ------------------------------------------ |
-| **openSMILE eGeMAPSv02** | 음향 피처 추출 | jitter, shimmer, HNR, F1, F2, loudness, F0 |
-| **librosa**              | 발화 속도 측정 | speed (초당 음절 수 기반)                  |
+| 엔진                     | 역할           | 추출 피처                                             |
+| ------------------------ | -------------- | ----------------------------------------------------- |
+| **openSMILE eGeMAPSv02** | 음향 피처 추출 | jitter, shimmer, HNR, F1, F2, loudness, F0, F0 변동성 |
+| **librosa**              | 발화 속도 측정 | speed (초당 음절 수 기반)                             |
 
-8가지 피처를 가중 평균하여 단일 변화율(changeRate)을 산출하고, 이를 0~5 레벨로 변환한다.
+9가지 피처를 가중 평균하여 단일 변화율(changeRate)을 산출하고, 이를 0~5 레벨로 변환한다.
+
+### 피처별 가중치 및 음주 시 변화 방향
+
+| 피처          | 설명                                   | 음주 시   | 방향      | 가중치 |
+| ------------- | -------------------------------------- | --------- | --------- | ------ |
+| **speed**     | 발화 속도 (음절/초)                    | 느려짐    | decrease  | 20%    |
+| **F0 변동성** | 기본 주파수 변동성 (stddevNorm)        | 증가      | increase  | 18%    |
+| **HNR**       | 조화음 대비 잡음 비율 (dB)             | 감소      | decrease  | 12%    |
+| **F0**        | 기본 주파수 평균 (semitone)            | 상승      | increase  | 12%    |
+| **shimmer**   | 음성 진폭 불안정성 (dB)                | 증가      | increase  | 8%     |
+| **F1**        | 제1 포먼트 발화 내 변동성 (stddevNorm) | 증가      | increase  | 8%     |
+| **F2**        | 제2 포먼트 발화 내 변동성 (stddevNorm) | 증가      | increase  | 8%     |
+| **jitter**    | 성대 떨림 주기 불규칙성                | 증가      | increase  | 7%     |
+| **loudness**  | 평균 음량 (sone)                       | 환경 의존 | deviation | 7%     |
 
 ## 사전 요구 사항
 
@@ -101,10 +115,11 @@ uvicorn main:app --port 8001 --workers 2
     "jitter": 0.012,
     "shimmer": 0.45,
     "hnr": 12.3,
-    "f1": 520.0,
-    "f2": 1580.0,
+    "f1": 0.25,
+    "f2": 0.18,
     "loudness": 0.35,
     "f0": 28.5,
+    "f0_var": 0.045,
     "speed": 0.88,
     "consistency": 0.9
   }
@@ -134,10 +149,11 @@ uvicorn main:app --port 8001 --workers 2
     "currentJitter": 0.018,
     "currentShimmer": 0.62,
     "currentHnr": 9.8,
-    "currentF1": 495.0,
-    "currentF2": 1520.0,
+    "currentF1": 0.35,
+    "currentF2": 0.28,
     "currentLoudness": 0.42,
     "currentF0": 30.1,
+    "currentF0Var": 0.078,
     "currentSpeed": 0.72
   }
 }

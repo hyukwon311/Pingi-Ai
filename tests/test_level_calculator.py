@@ -131,8 +131,8 @@ class TestDrunkDirection:
 
     def test_specific_directions(self):
         """학술 근거 기반으로 설정된 방향을 검증"""
-        assert DRUNK_DIRECTION["jitter"] == "increase"
-        assert DRUNK_DIRECTION["shimmer"] == "increase"
+        assert DRUNK_DIRECTION["jitter"] == "deviation"
+        assert DRUNK_DIRECTION["shimmer"] == "deviation"
         assert DRUNK_DIRECTION["hnr"] == "decrease"
         assert DRUNK_DIRECTION["f1"] == "increase"
         assert DRUNK_DIRECTION["f2"] == "increase"

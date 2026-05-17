@@ -24,18 +24,21 @@ pingi-backend 원본:
 # "decrease": 취하면 값이 감소 → (baseline - current) / baseline
 # "deviation": 취하면 편차가 커짐 → abs(current - baseline) / baseline
 #
-# 안정성 순위 (학술 근거 기반):
-#   1위 speed   — 거의 모든 화자/언어/환경에서 일관
-#   2위 f0_var  — 운동 제어 저하의 보편적 신호
-#   3위 hnr     — 성대 점막 건조 + 접촉 불완전
-#   4위 shimmer — 호흡 압력 불안정
-#   5위 jitter  — 개인차 크고 교란 요인(카페인, 피로, 흡연) 많음
-#   6위 f1/f2   — 혀/턱 미세 제어 저하 (stddevNorm 기준)
-#   7위 f0      — 30% 화자에서 변화 없거나 오히려 감소
-#   8위 loudness — 측정 환경 의존 (조용한 환경에서 방향 불확실)
+# 그룹 A — 의미 있는 변화량 (합 65%):
+#   speed   (20%) decrease — 거의 모든 화자/언어/환경에서 일관
+#   f0_var  (18%) increase — 운동 제어 저하의 보편적 신호
+#   hnr     (15%) decrease — 성대 점막 건조 + 접촉 불완전
+#   f0      (12%) increase — 대부분 상승하나 개인차 존재
+#
+# 그룹 B — 일관성 부족 / 외부 요인·개인차 큰 Feature (합 35%):
+#   jitter   (9%) deviation — 비단조적 변화, 비음주 요인에도 변동
+#   shimmer  (9%) deviation — 성별·모음 의존성으로 방향 불일치
+#   loudness (9%) deviation — 측정 환경 의존, 분포 확산
+#   f1       (4%) increase  — 턱/입 제어 저하 (stddevNorm)
+#   f2       (4%) increase  — 혀 제어 저하 (stddevNorm)
 DRUNK_DIRECTION: dict[str, str] = {
-    "jitter": "increase",
-    "shimmer": "increase",
+    "jitter": "deviation",
+    "shimmer": "deviation",
     "hnr": "decrease",
     "f1": "increase",
     "f2": "increase",

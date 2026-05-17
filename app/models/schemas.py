@@ -10,9 +10,8 @@ API 흐름 참고 (plan/pingi-ai_api.md):
     3. 헬스 체크: → HealthResponse (status, model, version)
 
 음향 피처 (openSMILE eGeMAPSv02 + librosa):
-    jitter, shimmer, hnr, loudness, f0 — openSMILE amean (평균값)
-    f1, f2 — openSMILE stddevNorm (발화 내 변동성)
-    f0_var — openSMILE stddevNorm (F0 변동성)
+    jitter, shimmer, hnr, f0 — openSMILE amean (평균값)
+    f1, f2, f0_var, loudness — openSMILE stddevNorm (발화 내 변동성)
     speed — librosa 기반 발화 속도 점수 (0~1)
 """
 
@@ -36,12 +35,12 @@ class BaselineFeatures(BaseModel):
 
     jitter: float = Field(
         ...,
-        description="성대 떨림 주기 불규칙성 (로컬 jitter 평균). 취하면 증가하나 교란 요인이 많다.",
+        description="성대 떨림 주기 불규칙성 (로컬 jitter 평균). 취하면 변동하나 방향 일관성이 부족하다.",
         examples=[0.012],
     )
     shimmer: float = Field(
         ...,
-        description="음성 진폭 불안정성 (로컬 shimmer dB 평균). 취하면 증가한다.",
+        description="음성 진폭 불안정성 (로컬 shimmer dB 평균). 취하면 변동한다(성별·모음 의존적).",
         examples=[0.45],
     )
     hnr: float = Field(
@@ -61,12 +60,12 @@ class BaselineFeatures(BaseModel):
     )
     loudness: float = Field(
         ...,
-        description="평균 음량 (sone). 음주 시 변화 방향은 환경 의존적이다.",
+        description="음량 변동성 (stddevNorm). 음주 시 호흡 제어 저하로 분포 확산. 측정 환경 의존적.",
         examples=[0.35],
     )
     f0: float = Field(
         ...,
-        description="기본 주파수 평균 (semitone from 27.5Hz). 취하면 상승 경향이나 30%는 예외.",
+        description="기본 주파수 평균 (semitone from 27.5Hz). 취하면 상승 경향이나 개인차 존재.",
         examples=[28.5],
     )
     f0_var: float = Field(
@@ -141,7 +140,7 @@ class RecordingDetail(BaseModel):
     )
     currentLoudness: float = Field(
         ...,
-        description="현재 녹음의 loudness 값",
+        description="현재 녹음의 loudness 변동성 (stddevNorm)",
         examples=[0.42],
     )
     currentF0: float = Field(

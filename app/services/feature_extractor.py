@@ -103,6 +103,10 @@ def extract_speed_score(y: np.ndarray, sr: int, syllable_count: int) -> float:
         0.0 ~ 1.0 사이의 속도 적합도 점수.
         1.0에 가까울수록 정상 발화 속도.
     """
+    if np.max(np.abs(y)) < 1e-6:
+        logger.warning("무음 오디오입니다")
+        return 0.5
+
     intervals = librosa.effects.split(y, top_db=30)
 
     if len(intervals) == 0:
@@ -137,7 +141,7 @@ def count_korean_syllables(text: str) -> int:
         text: 음절 수를 셀 텍스트. 예) "간장 공장 공장장은"
 
     반환값:
-        한글 음절 수. 예) 7
+        한글 음절 수. 예) 8
     """
     return sum(1 for ch in text if 0xAC00 <= ord(ch) <= 0xD7A3)
 

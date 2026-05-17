@@ -30,7 +30,7 @@ class TestCountKoreanSyllables:
 
     def test_longer_sentence(self):
         """긴 문장의 음절 수 계산"""
-        assert count_korean_syllables("간장 공장 공장장은") == 7
+        assert count_korean_syllables("간장 공장 공장장은") == 8
 
     def test_no_korean(self):
         """한글이 없으면 0"""

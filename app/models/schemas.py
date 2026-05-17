@@ -4,10 +4,13 @@ API 요청/응답 스키마 정의
 pingi-backend가 pingi-ai를 호출할 때 주고받는 데이터 구조를 정의한다.
 모든 스키마는 Pydantic BaseModel을 상속하여 자동 검증과 직렬화를 수행한다.
 
-API 흐름 참고 (plan/pingi-ai_api.md):
-    1. 베이스라인 분석: 오디오 3개 → BaselineResponse (features)
-    2. 핑이타임 분석: 오디오 1개 + 베이스라인 → RecordingResponse (score, level, changeRate)
+API 흐름:
+    1. 베이스라인 분석: 오디오 3개 → BaselineResponse (features + consistency)
+    2. 핑이타임 분석: 오디오 1개 → RecordingResponse (9개 피처)
     3. 헬스 체크: → HealthResponse (status, model, version)
+
+pingi-ai는 음향 피처 추출만 담당하며,
+변화율/취도 계산은 pingi-backend에서 수행한다.
 
 음향 피처 (openSMILE eGeMAPSv02 + librosa):
     jitter, shimmer, hnr, f0 — openSMILE amean (평균값)
@@ -105,58 +108,58 @@ class BaselineResponse(BaseModel):
 # 핑이타임 녹음 분석 관련 스키마
 # =============================================================================
 
-class RecordingDetail(BaseModel):
+class RecordingFeatures(BaseModel):
     """
-    핑이타임 분석의 상세 데이터
+    핑이타임 녹음에서 추출한 9개 음향 피처
 
-    현재 녹음에서 추출한 개별 피처 원시값을 담는다.
-    프론트엔드에서 직접 사용하기보다는 디버깅과 향후 분석 확장을 위해 제공한다.
+    pingi-backend는 이 피처를 DB의 베이스라인 피처와 비교하여
+    변화율/취도를 자체 계산한다.
     """
 
-    currentJitter: float = Field(
+    jitter: float = Field(
         ...,
-        description="현재 녹음의 jitter 값",
+        description="성대 떨림 주기 불규칙성 (로컬 jitter 평균)",
         examples=[0.018],
     )
-    currentShimmer: float = Field(
+    shimmer: float = Field(
         ...,
-        description="현재 녹음의 shimmer 값",
+        description="음성 진폭 불안정성 (로컬 shimmer dB 평균)",
         examples=[0.62],
     )
-    currentHnr: float = Field(
+    hnr: float = Field(
         ...,
-        description="현재 녹음의 HNR 값 (dB)",
+        description="조화음 대비 잡음 비율 (HNR, dB)",
         examples=[9.8],
     )
-    currentF1: float = Field(
+    f1: float = Field(
         ...,
-        description="현재 녹음의 F1 변동성 (stddevNorm)",
+        description="제1 포먼트 발화 내 변동성 (stddevNorm)",
         examples=[0.35],
     )
-    currentF2: float = Field(
+    f2: float = Field(
         ...,
-        description="현재 녹음의 F2 변동성 (stddevNorm)",
+        description="제2 포먼트 발화 내 변동성 (stddevNorm)",
         examples=[0.28],
     )
-    currentLoudness: float = Field(
+    loudness: float = Field(
         ...,
-        description="현재 녹음의 loudness 변동성 (stddevNorm)",
+        description="음량 변동성 (stddevNorm)",
         examples=[0.42],
     )
-    currentF0: float = Field(
+    f0: float = Field(
         ...,
-        description="현재 녹음의 F0 평균 (semitone)",
+        description="기본 주파수 평균 (semitone from 27.5Hz)",
         examples=[30.1],
     )
-    currentF0Var: float = Field(
+    f0_var: float = Field(
         ...,
-        description="현재 녹음의 F0 변동성 (stddevNorm)",
+        description="기본 주파수 변동성 (stddevNorm)",
         examples=[0.078],
     )
-    currentSpeed: float = Field(
+    speed: float = Field(
         ...,
         ge=0.0, le=1.0,
-        description="현재 녹음의 발화 속도 안정성",
+        description="발화 속도 안정성 (0~1)",
         examples=[0.72],
     )
 
@@ -165,31 +168,13 @@ class RecordingResponse(BaseModel):
     """
     POST /api/v1/analyze/recording 응답
 
-    핑이타임에서 녹음한 음성을 베이스라인과 비교하여 취도를 판정한 결과이다.
-    pingi-backend는 이 결과를 Recording 테이블에 저장하고,
-    멤버의 현재 레벨을 업데이트한다.
+    핑이타임 녹음에서 추출한 9개 음향 피처를 반환한다.
+    pingi-backend가 이 피처를 받아 베이스라인 대비 변화율/취도를 계산한다.
     """
 
-    score: float = Field(
+    features: RecordingFeatures = Field(
         ...,
-        ge=0.0, le=1.0,
-        description="취도 점수. 0.0(멀쩡) ~ 1.0(만취).",
-        examples=[0.35],
-    )
-    level: int = Field(
-        ...,
-        ge=0, le=5,
-        description="취도 레벨. 0(멀쩡) ~ 5(만취). changeRate 기반으로 산출.",
-        examples=[2],
-    )
-    changeRate: float = Field(
-        ...,
-        description="베이스라인 대비 변화율(%). 값이 클수록 음성 특성이 많이 변했음을 의미.",
-        examples=[23.5],
-    )
-    detail: RecordingDetail = Field(
-        ...,
-        description="현재 녹음의 상세 분석 데이터 (디버깅/향후 확장용)",
+        description="핑이타임 녹음에서 추출한 9개 음향 피처",
     )
 
 

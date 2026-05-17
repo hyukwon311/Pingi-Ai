@@ -1,33 +1,19 @@
 """
-취도 분석 서비스 (파이프라인 통합)
+음향 분석 서비스 (파이프라인 통합)
 
 개별 서비스(audio_converter, feature_extractor)를
-하나의 파이프라인으로 조합하여 최종 분석 결과를 산출한다.
+하나의 파이프라인으로 조합하여 음향 피처를 추출한다.
 
 두 가지 분석 모드:
-    1. 베이스라인 분석 (analyze_baseline_audios):
-       맨정신 상태의 음성 3개 → 개인 음성 기준선(features) 생성
-       → pingi-backend가 DB에 저장하여 이후 비교에 사용
+    1. 단일 오디오 분석 (analyze_single_audio):
+       오디오 1개 → 9개 피처 추출
+       핑이타임 녹음 분석에서 사용
 
-    2. 핑이타임 분석 (analyze_recording_audio):
-       술 마신 후 음성 1개 + 베이스라인 features → 취도 판정
-       → score, level, changeRate 반환
+    2. 베이스라인 분석 (analyze_baseline_audios):
+       맨정신 상태의 음성 3개 → 개인 음성 기준선(features + consistency) 생성
+       pingi-backend가 DB에 저장하여 이후 비교에 사용
 
-각 피처의 취도 산출 기여도(가중치) — 그룹 A/B 분류:
-
-    그룹 A — 의미 있는 변화량을 가지는 Feature (합 65%):
-    - speed    (20%): 발화 속도 감소. 가장 일관된 음주 신호.
-    - f0_var   (18%): F0 변동성 증가. 운동 제어 저하의 보편적 신호.
-    - hnr      (15%): 조화음 대비 잡음 비율 감소. 성대 점막 건조 + 접촉 불완전.
-    - f0       (12%): 기본 주파수 상승. 강한 신호이나 개인차 존재.
-
-    그룹 B — 일관성 부족 / 외부 요인·개인차 큰 Feature (합 35%):
-    - jitter   (9%): 성대 진동 주기 변동. 방향 일관성 부족(deviation).
-    - shimmer  (9%): 성대 진동 진폭 변동. 성별·모음 의존적(deviation).
-    - loudness (9%): 음량 변동성(stddevNorm). 측정 환경 의존적(deviation).
-    - f1       (4%): 제1 포먼트 변동성 증가. 턱/입 제어 저하.
-    - f2       (4%): 제2 포먼트 변동성 증가. 혀 제어 저하.
-    총합 = 100%로, 가중 평균하여 단일 changeRate를 산출한다.
+변화율/취도 계산은 pingi-backend에서 수행한다.
 """
 
 import logging
@@ -37,43 +23,26 @@ import numpy as np
 from app.models.schemas import (
     BaselineFeatures,
     BaselineResponse,
-    RecordingDetail,
-    RecordingResponse,
-)
-from app.utils.level_calculator import (
-    DRUNK_DIRECTION,
-    calculate_directional_change_rate,
-    calculate_level,
 )
 from app.services.audio_converter import convert_to_wav, cleanup_temp_file
 from app.services.feature_extractor import extract_all_features
 
 logger = logging.getLogger(__name__)
 
-_WEIGHTS: dict[str, float] = {
-    "speed": 0.20,
-    "f0_var": 0.18,
-    "hnr": 0.15,
-    "f0": 0.12,
-    "jitter": 0.09,
-    "shimmer": 0.09,
-    "loudness": 0.09,
-    "f1": 0.04,
-    "f2": 0.04,
-}
-
-_FEATURE_KEYS = list(_WEIGHTS.keys())
+_FEATURE_KEYS = [
+    "jitter", "shimmer", "hnr", "f1", "f2",
+    "loudness", "f0", "f0_var", "speed",
+]
 
 
-def _analyze_single_audio(
+def analyze_single_audio(
     audio_bytes: bytes,
     filename: str,
     sentence: str,
 ) -> dict[str, float]:
     """
-    단일 오디오 파일을 분석하여 모든 피처를 추출한다.
+    단일 오디오 파일을 분석하여 9개 피처를 추출한다.
 
-    이 함수는 베이스라인과 핑이타임 분석 모두에서 공통으로 사용된다.
     오디오 변환 → openSMILE + librosa 분석의 전체 파이프라인을 실행한다.
 
     매개변수:
@@ -122,7 +91,7 @@ async def analyze_baseline_audios(
     results: list[dict[str, float]] = []
     for i, ((audio_bytes, filename), sentence) in enumerate(zip(audio_data_list, sentences)):
         logger.info("베이스라인 녹음 %d/3 분석 중...", i + 1)
-        result = _analyze_single_audio(audio_bytes, filename, sentence)
+        result = analyze_single_audio(audio_bytes, filename, sentence)
         results.append(result)
 
     averages: dict[str, float] = {}
@@ -164,78 +133,3 @@ async def analyze_baseline_audios(
     )
 
     return BaselineResponse(features=features)
-
-
-async def analyze_recording_audio(
-    audio_bytes: bytes,
-    filename: str,
-    sentence: str,
-    baseline_features: BaselineFeatures,
-) -> RecordingResponse:
-    """
-    핑이타임 녹음을 베이스라인과 비교하여 취도를 판정한다.
-
-    처리 과정:
-        1. 현재 녹음의 9개 피처 추출
-        2. 각 피처별로 방향 인식 변화율 계산
-        3. 가중 평균으로 종합 changeRate 산출
-        4. changeRate → level(0~5) 변환
-        5. score(0.0~1.0) 산출
-
-    매개변수:
-        audio_bytes:       핑이타임 녹음 바이트 데이터
-        filename:          원본 파일명. 예) "pingitime.webm"
-        sentence:          이번 핑이타임의 기대 문장
-        baseline_features: DB에 저장된 해당 멤버의 베이스라인 피처
-
-    반환값:
-        RecordingResponse { score, level, changeRate, detail }
-    """
-    logger.info("핑이타임 분석 시작: sentence='%s'", sentence[:30])
-
-    current = _analyze_single_audio(audio_bytes, filename, sentence)
-
-    baseline_dict = {
-        "jitter": baseline_features.jitter,
-        "shimmer": baseline_features.shimmer,
-        "hnr": baseline_features.hnr,
-        "f1": baseline_features.f1,
-        "f2": baseline_features.f2,
-        "loudness": baseline_features.loudness,
-        "f0": baseline_features.f0,
-        "f0_var": baseline_features.f0_var,
-        "speed": baseline_features.speed,
-    }
-
-    weighted_change = 0.0
-    for key in _FEATURE_KEYS:
-        direction = DRUNK_DIRECTION[key]
-        change = calculate_directional_change_rate(
-            baseline_dict[key], current[key], direction,
-        )
-        weighted_change += change * _WEIGHTS[key]
-
-    level = calculate_level(weighted_change)
-    score = max(0.0, min(1.0, abs(weighted_change) / 100))
-
-    logger.info(
-        "핑이타임 분석 완료: changeRate=%.1f%%, level=%d, score=%.2f",
-        weighted_change, level, score,
-    )
-
-    return RecordingResponse(
-        score=round(score, 2),
-        level=level,
-        changeRate=round(weighted_change, 1),
-        detail=RecordingDetail(
-            currentJitter=round(current["jitter"], 6),
-            currentShimmer=round(current["shimmer"], 4),
-            currentHnr=round(current["hnr"], 2),
-            currentF1=round(current["f1"], 4),
-            currentF2=round(current["f2"], 4),
-            currentLoudness=round(current["loudness"], 4),
-            currentF0=round(current["f0"], 2),
-            currentF0Var=round(current["f0_var"], 4),
-            currentSpeed=round(current["speed"], 4),
-        ),
-    )

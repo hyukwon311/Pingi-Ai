@@ -3,18 +3,19 @@
 
 openSMILE eGeMAPSv02와 librosa를 사용하여 음성 파일에서 음향 특징을 추출한다.
 
-추출하는 특징 (8가지):
-    openSMILE eGeMAPSv02 (7가지):
-        1. jitter  — 성대 떨림 주기의 불규칙성. 취하면 증가.
-        2. shimmer — 음성 진폭의 불안정성. 취하면 증가.
-        3. hnr     — 조화음 대비 잡음 비율(Harmonics-to-Noise Ratio). 취하면 감소.
-        4. f1      — 제1 포먼트 주파수. 모음 발음 위치. 취하면 중심화.
-        5. f2      — 제2 포먼트 주파수. 모음 발음 위치. 취하면 중심화.
-        6. loudness — 평균 음량. 취하면 증가.
-        7. f0      — 기본 주파수(피치). 취하면 변동 증가.
+추출하는 특징 (9가지):
+    openSMILE eGeMAPSv02 (8가지):
+        1. jitter   — 성대 떨림 주기의 불규칙성 (amean). 취하면 증가.
+        2. shimmer  — 음성 진폭의 불안정성 (amean). 취하면 증가.
+        3. hnr      — 조화음 대비 잡음 비율 (amean). 취하면 감소.
+        4. f1       — 제1 포먼트 발화 내 변동성 (stddevNorm). 취하면 증가.
+        5. f2       — 제2 포먼트 발화 내 변동성 (stddevNorm). 취하면 증가.
+        6. loudness — 평균 음량 (amean). 취하면 변화 방향 불확실(환경 의존).
+        7. f0       — 기본 주파수 평균 (amean). 취하면 상승 경향(30% 예외).
+        8. f0_var   — 기본 주파수 변동성 (stddevNorm). 취하면 증가. 가장 robust한 지표 중 하나.
 
     librosa (1가지):
-        8. speed   — 발화 속도(초당 음절 수). 취하면 느려짐.
+        9. speed    — 발화 속도(초당 음절 수). 취하면 느려짐. 가장 일관된 지표.
 """
 
 import logging
@@ -42,7 +43,10 @@ def _get_smile() -> opensmile.Smile:
 
 def extract_opensmile_features(wav_path: str) -> dict[str, float]:
     """
-    eGeMAPSv02로 7가지 음향 피처의 원시값을 추출한다.
+    eGeMAPSv02로 8가지 음향 피처를 추출한다.
+
+    F1/F2는 평균값이 아닌 정규화 표준편차(stddevNorm)를 사용한다.
+    음주 시 F1/F2 평균은 거의 변하지 않지만, 발화 내 변동성이 크게 증가하기 때문이다.
 
     매개변수:
         wav_path: 16kHz 모노 wav 파일 경로
@@ -52,10 +56,11 @@ def extract_opensmile_features(wav_path: str) -> dict[str, float]:
             "jitter": 0.012,    # 주기 불규칙성 (로컬 jitter 평균)
             "shimmer": 0.45,    # 진폭 불안정성 (로컬 shimmer dB 평균)
             "hnr": 12.3,        # 조화음 대비 잡음 비율 (dB)
-            "f1": 520.0,        # 제1 포먼트 주파수 (Hz)
-            "f2": 1580.0,       # 제2 포먼트 주파수 (Hz)
+            "f1": 0.25,         # 제1 포먼트 발화 내 변동성 (stddevNorm)
+            "f2": 0.18,         # 제2 포먼트 발화 내 변동성 (stddevNorm)
             "loudness": 0.35,   # 평균 음량 (sone)
-            "f0": 28.5,         # 기본 주파수 (semitone from 27.5Hz)
+            "f0": 28.5,         # 기본 주파수 평균 (semitone from 27.5Hz)
+            "f0_var": 0.045,    # 기본 주파수 변동성 (stddevNorm)
         }
     """
     smile = _get_smile()
@@ -65,17 +70,19 @@ def extract_opensmile_features(wav_path: str) -> dict[str, float]:
         "jitter": float(df["jitterLocal_sma3nz_amean"].iloc[0]),
         "shimmer": float(df["shimmerLocaldB_sma3nz_amean"].iloc[0]),
         "hnr": float(df["HNRdBACF_sma3nz_amean"].iloc[0]),
-        "f1": float(df["F1frequency_sma3nz_amean"].iloc[0]),
-        "f2": float(df["F2frequency_sma3nz_amean"].iloc[0]),
+        "f1": float(df["F1frequency_sma3nz_stddevNorm"].iloc[0]),
+        "f2": float(df["F2frequency_sma3nz_stddevNorm"].iloc[0]),
         "loudness": float(df["loudness_sma3_amean"].iloc[0]),
         "f0": float(df["F0semitoneFrom27.5Hz_sma3nz_amean"].iloc[0]),
+        "f0_var": float(df["F0semitoneFrom27.5Hz_sma3nz_stddevNorm"].iloc[0]),
     }
 
     logger.debug(
         "openSMILE 피처: jitter=%.4f, shimmer=%.3f, hnr=%.1f, "
-        "f1=%.0f, f2=%.0f, loudness=%.3f, f0=%.1f",
+        "f1=%.4f, f2=%.4f, loudness=%.3f, f0=%.1f, f0_var=%.4f",
         features["jitter"], features["shimmer"], features["hnr"],
-        features["f1"], features["f2"], features["loudness"], features["f0"],
+        features["f1"], features["f2"], features["loudness"],
+        features["f0"], features["f0_var"],
     )
     return features
 
@@ -139,8 +146,8 @@ def extract_all_features(wav_path: str, expected_sentence: str) -> dict[str, flo
     """
     wav 파일에서 모든 음향 특징을 추출한다.
 
-    openSMILE eGeMAPSv02로 7가지 피처를 추출하고,
-    librosa로 발화 속도(speed)를 계산하여 총 8가지 피처를 반환한다.
+    openSMILE eGeMAPSv02로 8가지 피처를 추출하고,
+    librosa로 발화 속도(speed)를 계산하여 총 9가지 피처를 반환한다.
 
     매개변수:
         wav_path:          16kHz 모노 wav 파일 경로
@@ -150,7 +157,7 @@ def extract_all_features(wav_path: str, expected_sentence: str) -> dict[str, flo
         {
             "jitter": ..., "shimmer": ..., "hnr": ...,
             "f1": ..., "f2": ..., "loudness": ..., "f0": ...,
-            "speed": 0.85,
+            "f0_var": ..., "speed": 0.85,
         }
     """
     smile_features = extract_opensmile_features(wav_path)

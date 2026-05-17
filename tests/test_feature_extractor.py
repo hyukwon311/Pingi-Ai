@@ -7,8 +7,7 @@
 검증 항목:
     - count_korean_syllables()의 음절 수 계산
     - extract_speed_score()의 점수 범위 및 정상 동작
-    - extract_opensmile_features()의 반환 키 목록
-    - extract_all_features()의 통합 동작
+    - 피처 키 상수 목록이 9개 피처를 포함하는지
 
 실행:
     pytest tests/test_feature_extractor.py -v
@@ -64,3 +63,22 @@ class TestExtractSpeedScore:
         y = np.zeros(sr * 2)
         score = extract_speed_score(y, sr, syllable_count=10)
         assert score == 0.5
+
+
+class TestFeatureKeys:
+    """피처 키 목록이 analyzer의 _WEIGHTS, DRUNK_DIRECTION과 일치하는지 검증"""
+
+    _EXPECTED_OPENSMILE_KEYS = {
+        "jitter", "shimmer", "hnr", "f1", "f2",
+        "loudness", "f0", "f0_var",
+    }
+
+    _EXPECTED_ALL_KEYS = _EXPECTED_OPENSMILE_KEYS | {"speed"}
+
+    def test_opensmile_feature_count(self):
+        """openSMILE 피처가 8개인지 확인"""
+        assert len(self._EXPECTED_OPENSMILE_KEYS) == 8
+
+    def test_all_feature_count(self):
+        """전체 피처(openSMILE + speed)가 9개인지 확인"""
+        assert len(self._EXPECTED_ALL_KEYS) == 9

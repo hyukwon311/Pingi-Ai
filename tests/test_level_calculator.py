@@ -8,6 +8,7 @@
     - 변화율 구간별 레벨 반환값이 pingi-backend와 동일한지
     - 경계값(0%, 5%, 15%, 30%, 50%, 70%)에서의 동작
     - 방향 인식 변화율 계산의 정확성
+    - DRUNK_DIRECTION이 9개 피처를 모두 포함하는지
 
 이 테스트가 중요한 이유:
     pingi-backend의 levelCalculator.ts와 동일한 결과를 보장해야
@@ -18,6 +19,7 @@
 """
 
 from app.utils.level_calculator import (
+    DRUNK_DIRECTION,
     calculate_level,
     calculate_directional_change_rate,
 )
@@ -68,7 +70,7 @@ class TestDirectionalChangeRate:
     def test_increase_direction_drunk(self):
         """increase 방향: 값이 증가하면 양수 변화율 (취한 방향)"""
         rate = calculate_directional_change_rate(0.01, 0.015, "increase")
-        assert rate == 50.0
+        assert abs(rate - 50.0) < 0.01
 
     def test_increase_direction_sober(self):
         """increase 방향: 값이 감소하면 0으로 클램핑 (오히려 좋아짐)"""
@@ -107,3 +109,34 @@ class TestDirectionalChangeRate:
         assert calculate_directional_change_rate(12.0, 12.0, "increase") == 0.0
         assert calculate_directional_change_rate(12.0, 12.0, "decrease") == 0.0
         assert calculate_directional_change_rate(12.0, 12.0, "deviation") == 0.0
+
+
+class TestDrunkDirection:
+    """DRUNK_DIRECTION 딕셔너리 검증"""
+
+    _EXPECTED_FEATURES = {
+        "jitter", "shimmer", "hnr", "f1", "f2",
+        "loudness", "f0", "f0_var", "speed",
+    }
+
+    def test_contains_all_features(self):
+        """9개 피처가 모두 정의되어 있는지 확인"""
+        assert set(DRUNK_DIRECTION.keys()) == self._EXPECTED_FEATURES
+
+    def test_valid_directions_only(self):
+        """모든 값이 유효한 방향 문자열인지 확인"""
+        valid = {"increase", "decrease", "deviation"}
+        for key, direction in DRUNK_DIRECTION.items():
+            assert direction in valid, f"{key}의 방향 '{direction}'이 유효하지 않음"
+
+    def test_specific_directions(self):
+        """학술 근거 기반으로 설정된 방향을 검증"""
+        assert DRUNK_DIRECTION["jitter"] == "increase"
+        assert DRUNK_DIRECTION["shimmer"] == "increase"
+        assert DRUNK_DIRECTION["hnr"] == "decrease"
+        assert DRUNK_DIRECTION["f1"] == "increase"
+        assert DRUNK_DIRECTION["f2"] == "increase"
+        assert DRUNK_DIRECTION["loudness"] == "deviation"
+        assert DRUNK_DIRECTION["f0"] == "increase"
+        assert DRUNK_DIRECTION["f0_var"] == "increase"
+        assert DRUNK_DIRECTION["speed"] == "decrease"

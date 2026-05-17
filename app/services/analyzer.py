@@ -13,15 +13,16 @@
        술 마신 후 음성 1개 + 베이스라인 features → 취도 판정
        → score, level, changeRate 반환
 
-각 피처의 취도 산출 기여도(가중치):
-    - jitter   (15%): 성대 떨림 주기 불규칙성
-    - shimmer  (15%): 음성 진폭 불안정성
-    - hnr      (15%): 조화음 대비 잡음 비율
-    - f1       (7.5%): 제1 포먼트 주파수 편차
-    - f2       (7.5%): 제2 포먼트 주파수 편차
-    - loudness (10%): 평균 음량 변화
-    - f0       (15%): 기본 주파수 변동
-    - speed    (15%): 발화 속도 변화
+각 피처의 취도 산출 기여도(가중치) — 학술 근거 기반 안정성 순위:
+    - speed    (20%): 발화 속도 감소. 가장 일관된 음주 신호.
+    - f0_var   (18%): F0 변동성 증가. 운동 제어 저하의 보편적 신호.
+    - hnr      (12%): 조화음 대비 잡음 비율 감소. 성대 점막 효과.
+    - f0       (12%): 기본 주파수 상승. 강한 신호이나 30% 화자에서 예외.
+    - shimmer  (8%): 진폭 불안정성 증가. 호흡 압력 불안정.
+    - f1       (8%): 제1 포먼트 변동성 증가. 턱/입 제어 저하.
+    - f2       (8%): 제2 포먼트 변동성 증가. 혀 제어 저하.
+    - jitter   (7%): 주기 불규칙성 증가. 교란 요인(카페인, 피로 등) 많음.
+    - loudness (7%): 음량 편차. 측정 환경 의존적.
     총합 = 100%로, 가중 평균하여 단일 changeRate를 산출한다.
 """
 
@@ -46,14 +47,15 @@ from app.services.feature_extractor import extract_all_features
 logger = logging.getLogger(__name__)
 
 _WEIGHTS: dict[str, float] = {
-    "jitter": 0.15,
-    "shimmer": 0.15,
-    "hnr": 0.15,
-    "f1": 0.075,
-    "f2": 0.075,
-    "loudness": 0.10,
-    "f0": 0.15,
-    "speed": 0.15,
+    "speed": 0.20,
+    "f0_var": 0.18,
+    "hnr": 0.12,
+    "f0": 0.12,
+    "shimmer": 0.08,
+    "f1": 0.08,
+    "f2": 0.08,
+    "jitter": 0.07,
+    "loudness": 0.07,
 }
 
 _FEATURE_KEYS = list(_WEIGHTS.keys())
@@ -78,8 +80,8 @@ def _analyze_single_audio(
     반환값:
         {
             "jitter": 0.012, "shimmer": 0.45, "hnr": 12.3,
-            "f1": 520.0, "f2": 1580.0, "loudness": 0.35, "f0": 28.5,
-            "speed": 0.88,
+            "f1": 0.25, "f2": 0.18, "loudness": 0.35, "f0": 28.5,
+            "f0_var": 0.045, "speed": 0.88,
         }
     """
     wav_path = convert_to_wav(audio_bytes, filename)
@@ -139,20 +141,22 @@ async def analyze_baseline_audios(
         jitter=round(averages["jitter"], 6),
         shimmer=round(averages["shimmer"], 4),
         hnr=round(averages["hnr"], 2),
-        f1=round(averages["f1"], 2),
-        f2=round(averages["f2"], 2),
+        f1=round(averages["f1"], 4),
+        f2=round(averages["f2"], 4),
         loudness=round(averages["loudness"], 4),
         f0=round(averages["f0"], 2),
+        f0_var=round(averages["f0_var"], 4),
         speed=round(averages["speed"], 4),
         consistency=round(consistency, 4),
     )
 
     logger.info(
         "베이스라인 분석 완료: jitter=%.4f, shimmer=%.3f, hnr=%.1f, "
-        "f1=%.0f, f2=%.0f, loudness=%.3f, f0=%.1f, speed=%.3f, consistency=%.3f",
+        "f1=%.4f, f2=%.4f, loudness=%.3f, f0=%.1f, f0_var=%.4f, "
+        "speed=%.3f, consistency=%.3f",
         features.jitter, features.shimmer, features.hnr,
         features.f1, features.f2, features.loudness, features.f0,
-        features.speed, features.consistency,
+        features.f0_var, features.speed, features.consistency,
     )
 
     return BaselineResponse(features=features)
@@ -168,7 +172,7 @@ async def analyze_recording_audio(
     핑이타임 녹음을 베이스라인과 비교하여 취도를 판정한다.
 
     처리 과정:
-        1. 현재 녹음의 8개 피처 추출
+        1. 현재 녹음의 9개 피처 추출
         2. 각 피처별로 방향 인식 변화율 계산
         3. 가중 평균으로 종합 changeRate 산출
         4. changeRate → level(0~5) 변환
@@ -195,6 +199,7 @@ async def analyze_recording_audio(
         "f2": baseline_features.f2,
         "loudness": baseline_features.loudness,
         "f0": baseline_features.f0,
+        "f0_var": baseline_features.f0_var,
         "speed": baseline_features.speed,
     }
 
@@ -222,10 +227,11 @@ async def analyze_recording_audio(
             currentJitter=round(current["jitter"], 6),
             currentShimmer=round(current["shimmer"], 4),
             currentHnr=round(current["hnr"], 2),
-            currentF1=round(current["f1"], 2),
-            currentF2=round(current["f2"], 2),
+            currentF1=round(current["f1"], 4),
+            currentF2=round(current["f2"], 4),
             currentLoudness=round(current["loudness"], 4),
             currentF0=round(current["f0"], 2),
+            currentF0Var=round(current["f0_var"], 4),
             currentSpeed=round(current["speed"], 4),
         ),
     )

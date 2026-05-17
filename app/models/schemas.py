@@ -10,7 +10,9 @@ API 흐름 참고 (plan/pingi-ai_api.md):
     3. 헬스 체크: → HealthResponse (status, model, version)
 
 음향 피처 (openSMILE eGeMAPSv02 + librosa):
-    jitter, shimmer, hnr, f1, f2, loudness, f0 — openSMILE 원시값
+    jitter, shimmer, hnr, loudness, f0 — openSMILE amean (평균값)
+    f1, f2 — openSMILE stddevNorm (발화 내 변동성)
+    f0_var — openSMILE stddevNorm (F0 변동성)
     speed — librosa 기반 발화 속도 점수 (0~1)
 """
 
@@ -28,12 +30,13 @@ class BaselineFeatures(BaseModel):
     술을 마시기 전 3개 녹음에서 추출한 음성 특성의 평균값이다.
     이후 핑이타임에서 이 값을 기준으로 변화율을 계산하여 취도를 판정한다.
 
-    openSMILE 피처는 원시값으로 저장하며, speed와 consistency만 0~1 범위이다.
+    openSMILE amean 피처는 원시값, stddevNorm 피처는 정규화 표준편차이다.
+    speed와 consistency만 0~1 범위이다.
     """
 
     jitter: float = Field(
         ...,
-        description="성대 떨림 주기 불규칙성 (로컬 jitter 평균). 취하면 증가한다.",
+        description="성대 떨림 주기 불규칙성 (로컬 jitter 평균). 취하면 증가하나 교란 요인이 많다.",
         examples=[0.012],
     )
     shimmer: float = Field(
@@ -48,28 +51,33 @@ class BaselineFeatures(BaseModel):
     )
     f1: float = Field(
         ...,
-        description="제1 포먼트 주파수 (Hz). 모음 발음 위치. 취하면 중심화된다.",
-        examples=[520.0],
+        description="제1 포먼트 발화 내 변동성 (stddevNorm). 취하면 턱/입 제어 저하로 증가한다.",
+        examples=[0.25],
     )
     f2: float = Field(
         ...,
-        description="제2 포먼트 주파수 (Hz). 모음 발음 위치. 취하면 중심화된다.",
-        examples=[1580.0],
+        description="제2 포먼트 발화 내 변동성 (stddevNorm). 취하면 혀 제어 저하로 증가한다.",
+        examples=[0.18],
     )
     loudness: float = Field(
         ...,
-        description="평균 음량 (sone). 취하면 증가한다.",
+        description="평균 음량 (sone). 음주 시 변화 방향은 환경 의존적이다.",
         examples=[0.35],
     )
     f0: float = Field(
         ...,
-        description="기본 주파수 (semitone from 27.5Hz). 취하면 변동이 증가한다.",
+        description="기본 주파수 평균 (semitone from 27.5Hz). 취하면 상승 경향이나 30%는 예외.",
         examples=[28.5],
+    )
+    f0_var: float = Field(
+        ...,
+        description="기본 주파수 변동성 (stddevNorm). 취하면 운동 제어 저하로 거의 보편적으로 증가한다.",
+        examples=[0.045],
     )
     speed: float = Field(
         ...,
         ge=0.0, le=1.0,
-        description="발화 속도 안정성 (0~1). 정상 발화 속도에 가까울수록 높은 값.",
+        description="발화 속도 안정성 (0~1). 정상 발화 속도에 가까울수록 높은 값. 가장 일관된 음주 지표.",
         examples=[0.88],
     )
     consistency: float = Field(
@@ -123,13 +131,13 @@ class RecordingDetail(BaseModel):
     )
     currentF1: float = Field(
         ...,
-        description="현재 녹음의 F1 주파수 (Hz)",
-        examples=[495.0],
+        description="현재 녹음의 F1 변동성 (stddevNorm)",
+        examples=[0.35],
     )
     currentF2: float = Field(
         ...,
-        description="현재 녹음의 F2 주파수 (Hz)",
-        examples=[1520.0],
+        description="현재 녹음의 F2 변동성 (stddevNorm)",
+        examples=[0.28],
     )
     currentLoudness: float = Field(
         ...,
@@ -138,8 +146,13 @@ class RecordingDetail(BaseModel):
     )
     currentF0: float = Field(
         ...,
-        description="현재 녹음의 F0 값 (semitone)",
+        description="현재 녹음의 F0 평균 (semitone)",
         examples=[30.1],
+    )
+    currentF0Var: float = Field(
+        ...,
+        description="현재 녹음의 F0 변동성 (stddevNorm)",
+        examples=[0.078],
     )
     currentSpeed: float = Field(
         ...,

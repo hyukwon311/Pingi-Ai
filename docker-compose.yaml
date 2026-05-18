@@ -1,3 +1,5 @@
+# Pingi-AI Docker Compose
+
 services:
   pingi-ai:
     build: .

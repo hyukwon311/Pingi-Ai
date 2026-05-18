@@ -2,9 +2,6 @@
 취도 레벨 계산기
 
 베이스라인 대비 발음 변화율(changeRate)을 0~5 레벨로 변환한다.
-이 모듈의 계산 공식은 pingi-backend의 utils/levelCalculator.ts와
-정확히 동일하게 유지해야 한다. 두 곳의 공식이 다르면 프론트엔드에
-표시되는 레벨이 불일치할 수 있다.
 
 레벨 기준표:
     레벨 0 (멀쩡해요)       : 변화율 < 5%
@@ -13,9 +10,6 @@
     레벨 3 (제법 취함)       : 30% ≤ 변화율 < 50%
     레벨 4 (많이 취함)       : 50% ≤ 변화율 < 70%
     레벨 5 (만취)            : 변화율 ≥ 70%
-
-pingi-backend 원본:
-    pingi-backend/src/utils/levelCalculator.ts
 """
 
 
@@ -23,19 +17,6 @@ pingi-backend 원본:
 # "increase": 취하면 값이 증가 → (current - baseline) / baseline
 # "decrease": 취하면 값이 감소 → (baseline - current) / baseline
 # "deviation": 취하면 편차가 커짐 → abs(current - baseline) / baseline
-#
-# 그룹 A — 의미 있는 변화량 (합 65%):
-#   speed   (20%) decrease — 거의 모든 화자/언어/환경에서 일관
-#   f0_var  (18%) increase — 운동 제어 저하의 보편적 신호
-#   hnr     (15%) decrease — 성대 점막 건조 + 접촉 불완전
-#   f0      (12%) increase — 대부분 상승하나 개인차 존재
-#
-# 그룹 B — 일관성 부족 / 외부 요인·개인차 큰 Feature (합 35%):
-#   jitter   (9%) deviation — 비단조적 변화, 비음주 요인에도 변동
-#   shimmer  (9%) deviation — 성별·모음 의존성으로 방향 불일치
-#   loudness (9%) deviation — 측정 환경 의존, 분포 확산
-#   f1       (4%) increase  — 턱/입 제어 저하 (stddevNorm)
-#   f2       (4%) increase  — 혀 제어 저하 (stddevNorm)
 DRUNK_DIRECTION: dict[str, str] = {
     "jitter": "deviation",
     "shimmer": "deviation",
@@ -48,12 +29,28 @@ DRUNK_DIRECTION: dict[str, str] = {
     "speed": "decrease",
 }
 
+# 각 피처의 가중치 (합 = 1.0).
+# 그룹 A — 의미 있는 변화량 (합 65%):
+#   speed(20%), f0_var(18%), hnr(15%), f0(12%)
+# 그룹 B — 일관성 부족 / 외부 요인·개인차 큰 Feature (합 35%):
+#   jitter(9%), shimmer(9%), loudness(9%), f1(4%), f2(4%)
+FEATURE_WEIGHTS: dict[str, float] = {
+    "jitter": 0.09,
+    "shimmer": 0.09,
+    "hnr": 0.15,
+    "f1": 0.04,
+    "f2": 0.04,
+    "loudness": 0.09,
+    "f0": 0.12,
+    "f0_var": 0.18,
+    "speed": 0.20,
+}
+
 
 def calculate_level(change_rate: float) -> int:
     """
     변화율(%)을 취도 레벨(0~5)로 변환한다.
 
-    pingi-backend의 calculateLevel()과 동일한 구간 기준을 사용한다.
     음수 변화율도 절댓값으로 처리하여 발음이 "좋아진" 경우에도
     변화 자체를 감지한다.
 
@@ -115,8 +112,6 @@ def calculate_directional_change_rate(
 def get_level_description(level: int) -> str:
     """
     레벨 숫자에 대응하는 한글 설명을 반환한다.
-
-    pingi-backend의 getLevelDescription()과 동일한 문구를 사용한다.
 
     매개변수:
         level: 0~5 사이의 취도 레벨

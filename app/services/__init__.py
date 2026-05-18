@@ -19,9 +19,9 @@
     analyzer.py          - 베이스라인 대비 취도 분석 (파이프라인 통합)
 """
 
-from .analyzer import analyze_baseline_audios, analyze_single_audio
+from .analyzer import analyze_baseline, analyze_recording
 
 __all__ = [
-    "analyze_baseline_audios",
-    "analyze_single_audio",
+    "analyze_baseline",
+    "analyze_recording",
 ]
